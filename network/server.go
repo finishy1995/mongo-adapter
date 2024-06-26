@@ -1,9 +1,11 @@
 package network
 
 import (
-	"bytes"
 	"encoding/binary"
-	"finishy1995/mongo-adapter/library/log"
+	"github.com/finishy1995/mongo-adapter/library/log"
+	"github.com/finishy1995/mongo-adapter/processor"
+	"github.com/finishy1995/mongo-adapter/types"
+	"github.com/panjf2000/ants/v2"
 	"github.com/panjf2000/gnet/v2"
 )
 
@@ -31,19 +33,18 @@ func (s *Server) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
 	return
 }
 
-func (s *Server) OnClose(c gnet.Conn, err error) (action gnet.Action) {
+func (s *Server) OnClose(c gnet.Conn, _ error) (action gnet.Action) {
 	log.Debugf("Connection closed: %s", c.RemoteAddr().String())
 	return
 }
 
 func (s *Server) OnTraffic(c gnet.Conn) (action gnet.Action) {
-	// buf, _ := c.Next(-1)
 	s.handleMessage(c)
 	return
 }
 
 func (s *Server) handleMessage(conn gnet.Conn) {
-	header := MsgHeader{}
+	header := types.MsgHeader{}
 	// 把 buf 处理为 header
 	if err := binary.Read(conn, binary.LittleEndian, &header); err != nil {
 		log.Errorf("Read header failed: %s", err.Error())
@@ -56,6 +57,13 @@ func (s *Server) handleMessage(conn gnet.Conn) {
 		return
 	}
 
-	buffer := bytes.NewBuffer(buf)
-	log.Debugf("Received header: %+v, message: %s", header, buffer.String())
+	log.Debugf("Received header: %+v, message: %s", header, string(buf))
+
+	err := ants.Submit(func() {
+		processor.HandleMessage(&header, buf, conn)
+	})
+
+	if err != nil {
+		log.Errorf("Failed to submit task: %s", err.Error())
+	}
 }
