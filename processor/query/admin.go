@@ -125,7 +125,7 @@ func mechanism(query *OpQuery) (bson.M, error) {
 			return nil, err
 		}
 
-		conversationId := tools.GetRandomString(8)
+		conversationId := query.Header.RequestID
 		index := strings.Index(res, ",")
 		rValue := res[:index]
 		resMap[rValue] = conv
@@ -135,6 +135,8 @@ func mechanism(query *OpQuery) (bson.M, error) {
 				Data:    []byte(res),
 			},
 			"ok":             1,
+			"code":           0,
+			"done":           false,
 			"conversationId": conversationId,
 		}, nil
 	} else if _, ok := query.Query["saslContinue"]; ok {
@@ -152,7 +154,7 @@ func mechanism(query *OpQuery) (bson.M, error) {
 		res, err := conv.Step(payloadString)
 		log.Debugf("SCRAM-SHA-1 response: %s", res)
 		if err != nil {
-			// TODO: fixme
+			// TODO: fixme, maybe due to mgo too old scram driver
 			if res != "e=invalid-proof" {
 				return nil, err
 			}
@@ -162,7 +164,9 @@ func mechanism(query *OpQuery) (bson.M, error) {
 		}
 
 		return bson.M{
-			"done": true,
+			"done":           true,
+			"conversationId": query.Header.RequestID,
+			"code":           0,
 			"payload": primitive.Binary{
 				Subtype: 0,
 				Data:    []byte(res),
