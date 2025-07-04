@@ -57,7 +57,3 @@ Point your MongoDB client/tool at your `mongo-adapter` listen address (default `
 ## License
 
 Apache 2.0
-
----
-
-*No affiliation with MongoDB Inc. "MongoDB" is a trademark of MongoDB Inc.*
