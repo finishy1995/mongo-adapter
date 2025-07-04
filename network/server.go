@@ -1,9 +1,12 @@
 package network
 
 import (
+	"errors"
+	"io"
+	"time"
+
 	"finishy1995/mongo-adapter/library/log"
 	"finishy1995/mongo-adapter/protocol"
-	"time"
 
 	"github.com/panjf2000/gnet/v2"
 	"github.com/panjf2000/gnet/v2/pkg/logging"
@@ -20,7 +23,7 @@ func NewServerAndMustStart(address string, protocol *protocol.Server) {
 		address:        address,
 		protocolServer: protocol,
 	}
-	if err := gnet.Run(s, "tcp://"+address, gnet.WithLogLevel(logging.InfoLevel)); err != nil {
+	if err := gnet.Run(s, "tcp://"+address, gnet.WithLogLevel(logging.ErrorLevel)); err != nil {
 		panic(err)
 	}
 }
@@ -42,10 +45,13 @@ func (s *Server) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
 
 func (s *Server) OnClose(c gnet.Conn, err error) (action gnet.Action) {
 	if err != nil {
-		log.Errorf("Client disconnected with error: %v", err)
-	} else {
-		log.Debugf("Client disconnected, addr: %s", c.RemoteAddr())
+		// 忽略EOF错误，视为正常断开连接
+		if !errors.Is(err, io.EOF) {
+			log.Errorf("Client disconnected with error: %v, addr: %s", err, c.RemoteAddr())
+			return
+		}
 	}
+	log.Debugf("Client disconnected, addr: %s", c.RemoteAddr())
 	return
 }
 

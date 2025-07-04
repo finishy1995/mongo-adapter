@@ -6,7 +6,6 @@ import (
 	"io"
 
 	"finishy1995/mongo-adapter/library/log"
-	"finishy1995/mongo-adapter/protocol/message"
 
 	"go.mongodb.org/mongo-driver/bson"
 )
@@ -69,7 +68,7 @@ func (s *Server) OnMessage(conn Conn, buf []byte) bool {
 		log.Debugf("Received OP_QUERY requestID: %d, Collection: %s, Message: %+v", header.RequestID, query.FullCollectionName, cmd)
 
 		if query.FullCollectionName == "admin.$cmd" {
-			s.sendResponse(conn, header.RequestID, message.HandleMessage(cmd))
+			s.sendResponse(conn, header.RequestID, messageHandle(cmd))
 		}
 		break
 	case OP_MSG:
@@ -98,7 +97,7 @@ func (s *Server) OnMessage(conn Conn, buf []byte) bool {
 			}
 		}
 		log.Debugf("Received OP_MSG requestID: %d, Message: %+v", header.RequestID, msg)
-		s.sendResponse(conn, header.RequestID, message.HandleMessage(msg.Sections[0].Body))
+		s.sendResponse(conn, header.RequestID, messageHandle(msg.Sections[0].Body))
 		break
 	default:
 		log.Errorf("Received unsupported OpCode: %d\n", header.OpCode)
