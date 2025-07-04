@@ -37,5 +37,5 @@ type OpMsg struct {
 type Section struct {
 	Kind uint8 // 0 or 1
 	// Type 0:
-	Body bson.M // BSON 文档
+	Body bson.D // BSON 文档
 }

@@ -59,7 +59,7 @@ func (s *Server) OnMessage(conn Conn, buf []byte) bool {
 			return false
 		}
 		query.Query = buffer.Bytes()
-		var cmd bson.M
+		var cmd bson.D
 		if err := bson.Unmarshal(query.Query, &cmd); err != nil {
 			log.Errorf("Error unmarshalling query:", err)
 			return false
@@ -87,7 +87,7 @@ func (s *Server) OnMessage(conn Conn, buf []byte) bool {
 					log.Errorf("Error reading type 0 BSON document:", err)
 					return false
 				}
-				var doc bson.M
+				var doc bson.D
 				bson.Unmarshal(docBytes, &doc)
 				msg.Sections = append(msg.Sections, Section{Kind: 0, Body: doc})
 			} else if kind == 1 {

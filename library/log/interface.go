@@ -1,5 +1,7 @@
 package log
 
+import "strings"
+
 type Level uint8
 
 const (
@@ -55,4 +57,21 @@ func Errorf(message string, param ...interface{}) {
 
 func SetLevel(level Level) {
 	logInstance.SetLevel(level)
+}
+
+func SetLevelWithString(level string) {
+	level = strings.ToUpper(level)
+
+	switch level {
+	case "DEBUG":
+		SetLevel(DEBUG)
+	case "INFO":
+		SetLevel(INFO)
+	case "WARNING":
+		SetLevel(WARNING)
+	case "ERROR":
+		SetLevel(ERROR)
+	default:
+		SetLevel(DefaultLevel)
+	}
 }

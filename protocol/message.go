@@ -10,25 +10,48 @@ var reservedKeys = map[string]struct{}{
 	"lsid": {},
 }
 
-func messageHandle(message bson.M) bson.M {
+// 帮助函数，在 bson.D 中查找 key
+func getValueFromD(doc bson.D, key string) (interface{}, bool) {
+	for _, e := range doc {
+		if e.Key == key {
+			return e.Value, true
+		}
+	}
+	return nil, false
+}
+
+func messageHandle(message bson.D) bson.M {
 	if db == nil {
 		return bson.M{"ok": 0, "errmsg": "MongoDB server connection error"}
 	}
 	var result bson.M
 
-	if _, ok := message["ismaster"]; ok {
-		err := db.Database("admin").RunCommand(context.TODO(), bson.M{"hello": 1}).Decode(&result)
+	// 正确查找 ismaster 字段
+	if _, ok := getValueFromD(message, "ismaster"); ok {
+		err := db.Database("admin").RunCommand(context.TODO(), bson.M{"ismaster": 1}).Decode(&result)
 		if err != nil {
 			return bson.M{"ok": 0, "errmsg": err.Error()}
 		}
-		result["hosts"] = []string{"127.0.0.1:27017"}
-		result["primary"] = "127.0.0.1:27017"
-		result["me"] = "127.0.0.1:27017"
-		return result
+		// 构造更简洁的响应
+		response := bson.M{
+			"ismaster":       true,
+			"maxWireVersion": result["maxWireVersion"],
+			"minWireVersion": result["minWireVersion"],
+			"ok":             1,
+			"hosts":          []string{"127.0.0.1:27017"},
+			"primary":        "127.0.0.1:27017",
+			"me":             "127.0.0.1:27017",
+		}
+		if v, ok := result["logicalSessionTimeoutMinutes"]; ok {
+			response["logicalSessionTimeoutMinutes"] = v
+		}
+		return response
 	}
 
 	cmd := bson.D{}
-	for k, v := range message {
+	for _, e := range message {
+		k := e.Key
+		v := e.Value
 		// 跳过 $ 开头的保留字段
 		if len(k) > 0 && k[0] == '$' {
 			continue
@@ -40,17 +63,23 @@ func messageHandle(message bson.M) bson.M {
 		cmd = append(cmd, bson.E{Key: k, Value: v})
 	}
 
-	err := db.Database(getDB(message)).RunCommand(context.TODO(), cmd).Decode(&result)
+	err := db.Database(getDBFromD(message)).RunCommand(context.TODO(), cmd).Decode(&result)
 	if err != nil {
 		return bson.M{"ok": 0, "errmsg": err.Error()}
 	}
 	return result
 }
 
-func getDB(message bson.M) string {
+// 这里改成 bson.D 版
+func getDBFromD(message bson.D) string {
 	dbName := "admin"
-	if v, ok := message["$db"].(string); ok && v != "" {
-		dbName = v
+	for _, e := range message {
+		if e.Key == "$db" {
+			if v, ok := e.Value.(string); ok && v != "" {
+				dbName = v
+			}
+			break
+		}
 	}
 	return dbName
 }
