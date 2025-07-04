@@ -1,15 +1,26 @@
 # mongo-adapter
 
-A lightweight protocol adapter for MongoDB, written in Go.  
-Acts as a transparent proxy for MongoDB clients and tools, enabling features like traffic filtering, statistics, and custom protocol processing.
+A lightweight, stateless protocol adapter and proxy for MongoDB, written in Go.
+Designed to act as a transparent proxy between MongoDB clients and servers, it enables features like traffic filtering, statistics collection, and custom command processing—all without modifying MongoDB itself or your managed MongoDB services.
 
-## Features
+Key features:
 
-- **Transparent MongoDB proxy:** Connects MongoDB clients to your actual MongoDB service with no client-side changes.
-- **Protocol filtering:** Supports filtering or modifying MongoDB commands in real time.
-- **Traffic statistics:** Collects access and performance stats for audit or optimization.
-- **Compatible with MongoDB tools:** Works with Compass, mongosh, Studio 3T, and others.
-- **Written in Go:** Simple, fast, and easy to deploy.
+- **Stateless and highly scalable**: Deploy multiple mongo-adapter instances behind a load balancer for horizontal scaling and high availability.
+- **Offload operational tasks**: Move rate limiting, traffic monitoring, and audit logging from your MongoDB server to the proxy layer—improving security and reducing load on your primary database infrastructure.
+- **Protocol bridging for non-official SDKs**: Enable legacy or unofficial MongoDB clients that lack TLS/SSL support (such as some community drivers or SDKs) to connect securely to managed MongoDB services like Atlas.
+- **Powerful extension point**: Add advanced features or enforce policies without altering MongoDB source code or your cloud provider’s managed service.
+
+This makes mongo-adapter ideal for scenarios requiring flexible traffic management, security, and observability for MongoDB, with minimal operational risk and maximum deployment flexibility.
+
+## Scenarios
+
+- [x] Solving application-side lack of TLS support, e.g., enabling Atlas usage for clients that do not support TLS
+- [ ] Bridging old or unofficial drivers to connect with newer versions of MongoDB (cross-version compatibility)
+- [ ] Cross-database support, e.g., executing SQL statements to operate on MongoDB
+- [ ] UDP and WebSocket protocol support, enabling direct MongoDB access in weak network or browser-based scenarios
+- [x] Cross-region and multi-availability-zone high availability deployment, supporting pseudo-multi-region read/write
+- [ ] Migration and synchronization: enable zero-downtime migrations with dual/multi-write strategies via proxy
+- [ ] Audit logging, rate limiting, and tracing (tracespan)
 
 ## Getting Started
 
@@ -32,27 +43,19 @@ go build -o mongo-adapter main.go
 ./mongo-adapter \
   -loglevel=DEBUG \
   -uri="mongodb://user:pass@your-mongodb-host:27017/db" \
-  -listen="127.0.0.1:27017"
+  -listen="0.0.0.0:27017"
 ```
 
 **Command line options:**
 
-- `-loglevel` — Log level (`DEBUG`, `INFO`, `WARN`, `ERROR`). Default: `DEBUG`
+- `-loglevel` — Log level (`DEBUG`, `INFO`, `WARN`, `ERROR`). Default: `INFO`
 - `-uri` — MongoDB connection URI (**required**)
-- `-listen` — Local listen address. Default: `127.0.0.1:27017`
+- `-listen` — Local listen address. Default: `0.0.0.0:27017`
+- `-expose` — Expose address, for compass or other tools to discovery. Default: `127.0.0.1:27017`
 
 ### 4. Connect
 
-Point your MongoDB client/tool at your `mongo-adapter` listen address (default `127.0.0.1:27017`).
-
-## Project Structure
-
-- `main.go` — Application entry point
-- `network/` — Network server code
-- `protocol/` — MongoDB protocol parsing and handling
-- `processor/` — Command processing and filtering logic
-- `library/` — Logging and utilities
-- `types/` — Type definitions
+Point your MongoDB client/tool at your `mongo-adapter` listen address.
 
 ## License
 
