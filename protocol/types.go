@@ -1,4 +1,6 @@
-package network
+package protocol
+
+import "go.mongodb.org/mongo-driver/bson"
 
 // MsgHeader represents the common message header in MongoDB Wire Protocol
 type MsgHeader struct {
@@ -9,7 +11,7 @@ type MsgHeader struct {
 }
 
 // OpQuery represents the OP_QUERY message in MongoDB Wire Protocol
-type opQuery struct {
+type OpQuery struct {
 	Header               MsgHeader
 	Flags                int32
 	FullCollectionName   string
@@ -17,4 +19,23 @@ type opQuery struct {
 	NumberToReturn       int32
 	Query                []byte
 	ReturnFieldsSelector []byte
+}
+
+type OpReply struct {
+	ResponseFlags  int32
+	CursorID       int64
+	StartingFrom   int32
+	NumberReturned int32
+}
+
+type OpMsg struct {
+	Header   MsgHeader
+	Flags    int32
+	Sections []Section
+}
+
+type Section struct {
+	Kind uint8 // 0 or 1
+	// Type 0:
+	Body bson.M // BSON 文档
 }

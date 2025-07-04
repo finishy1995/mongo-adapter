@@ -1,4 +1,4 @@
-package network
+package protocol
 
 const (
 	OP_REPLY        = 1
@@ -10,4 +10,5 @@ const (
 	OP_DELETE       = 2006
 	OP_KILL_CURSORS = 2007
 	OP_COMMAND      = 2010
+	OP_MSG          = 2013
 )
