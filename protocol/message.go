@@ -6,8 +6,15 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
-var reservedKeys = map[string]struct{}{
-	"lsid": {},
+var (
+	reservedKeys = map[string]struct{}{
+		"lsid": {},
+	}
+	exposeAddr = "127.0.0.1:27017"
+)
+
+func RegisterExposeAddress(addr string) {
+	exposeAddr = addr
 }
 
 // 帮助函数，在 bson.D 中查找 key
@@ -38,9 +45,9 @@ func messageHandle(message bson.D) bson.M {
 			"maxWireVersion": result["maxWireVersion"],
 			"minWireVersion": result["minWireVersion"],
 			"ok":             1,
-			"hosts":          []string{"127.0.0.1:27017"},
-			"primary":        "127.0.0.1:27017",
-			"me":             "127.0.0.1:27017",
+			"hosts":          []string{exposeAddr},
+			"primary":        exposeAddr,
+			"me":             exposeAddr,
 		}
 		if v, ok := result["logicalSessionTimeoutMinutes"]; ok {
 			response["logicalSessionTimeoutMinutes"] = v
