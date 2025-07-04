@@ -12,6 +12,19 @@ Key features:
 
 This makes mongo-adapter ideal for scenarios requiring flexible traffic management, security, and observability for MongoDB, with minimal operational risk and maximum deployment flexibility.
 
+## Architecture
+
+Normal:
+
+![Normal Architecture](architecture/normal.drawio.png)
+
+Cross Region(2 regions):
+
+![Cross Region Architecture](architecture/cross-region.drawio.png)
+
+The same principle applies to three or more regions. The deployment of MongoDB servers can be adjusted to a 1-1-1, 2-2-1, or any other configuration suitable for multi-region setups.
+
+
 ## Scenarios
 
 - [x] Solving application-side lack of TLS support, e.g., enabling Atlas usage for clients that do not support TLS
