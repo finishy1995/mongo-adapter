@@ -82,9 +82,9 @@ Point your MongoDB client/tool at your `mongo-adapter` listen address.
 
 ## Known Issues
 
-> **First connection timeout when debug is off (mgo compatibility):**  
-> When using the `mongo-adapter` as a mock server for [mgo](https://github.com/go-mgo/mgo), the first client connection will always experience an `i/o timeout` if `mgo.SetDebug(true)` is **not** set. With debug enabled, everything works smoothly.  
-> **Root cause:** This is typically due to concurrency, buffering, or response timing issues in the network implementation. Enabling debug logging introduces enough delay to avoid the race condition.  
+- [x] **First connection timeout when debug is off (mgo compatibility):**  
+      Previously, when using the `mongo-adapter` as a mock server for [mgo](https://github.com/go-mgo/mgo), the first client connection would always experience an `i/o timeout` if `mgo.SetDebug(true)` was **not** set.  
+      **Status:** *Resolved* — The issue was fixed by correctly handling message boundaries and packet framing in the network layer.
 
 ## License
 

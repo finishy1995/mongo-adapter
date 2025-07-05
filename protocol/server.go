@@ -139,6 +139,7 @@ func (s *Server) OnMessage(conn Conn, buf []byte) bool {
 
 	return true
 }
+
 func (s *Server) sendResponse(conn Conn, requestID int32, requestOpCode int32, responseDoc bson.M) {
 	log.Debugf("sendResponse. requestID: %d, responseDoc: %+v", requestID, responseDoc)
 
