@@ -31,8 +31,8 @@ The following frameworks have been tested and verified for compatibility:
 - **[Skynet](https://github.com/cloudwu/skynet)**
 
 **Verification details:**  
-Unit tests are used for verification. With the [mongo-adapter](https://github.com/cloudwu/skynet/blob/master/lualib/mongo.lua), Skynet can directly connect both to this mock server and to MongoDB Atlas ([https://cloud.mongodb.com/](https://cloud.mongodb.com/)) running MongoDB 7.0 and 8.0.  
-All tests pass against both the mock server and real MongoDB clusters.
+
+Unit tests are used for verification. With the `mongo-adapter`, these frameworks can connect to MongoDB Atlas ([https://cloud.mongodb.com/](https://cloud.mongodb.com/)) running MongoDB 7.0 and 8.0.  
 
 ## Scenarios
 
