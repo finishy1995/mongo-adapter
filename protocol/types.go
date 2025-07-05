@@ -30,7 +30,7 @@ type OpReply struct {
 
 type OpMsg struct {
 	Header   MsgHeader
-	Flags    int32
+	Flags    uint32
 	Sections []Section
 }
 

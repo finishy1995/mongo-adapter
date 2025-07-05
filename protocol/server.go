@@ -75,30 +75,49 @@ func (s *Server) OnMessage(conn Conn, buf []byte) bool {
 		break
 	case OP_MSG:
 		msg := OpMsg{Header: header}
-		if err := binary.Read(buffer, binary.LittleEndian, &msg.Flags); err != nil {
-			log.Errorf("Error reading flags:", err)
+		msgLength := int(header.MessageLength)
+		if len(buf) < msgLength {
+			log.Errorf("buf too short for OP_MSG")
 			return false
 		}
+		body := buf[16:msgLength] // 只处理当前消息体
+		offset := 0
+
+		if len(body) < 4 {
+			log.Errorf("body too short for flags")
+			return false
+		}
+		msg.Flags = binary.LittleEndian.Uint32(body[offset : offset+4])
+		offset += 4
 
 		msg.Sections = make([]Section, 0)
-		for buffer.Len() > 0 {
-			kind, _ := buffer.ReadByte()
+		for offset < len(body) {
+			kind := body[offset]
+			offset++
 			if kind == 0 {
-				// type 0, 主 BSON 文档
-				docBytes, err := readBSONBytes(buffer)
-				if err != nil {
-					log.Errorf("Error reading type 0 BSON document:", err)
+				if offset+4 > len(body) {
+					log.Errorf("Not enough bytes for BSON length")
 					return false
 				}
+				docLen := int(binary.LittleEndian.Uint32(body[offset : offset+4]))
+				if offset+docLen > len(body) {
+					log.Errorf("BSON out of bounds")
+					return false
+				}
+				docBytes := body[offset : offset+docLen]
 				var doc bson.D
-				bson.Unmarshal(docBytes, &doc)
+				if err := bson.Unmarshal(docBytes, &doc); err != nil {
+					log.Errorf("Error decoding BSON: %v", err)
+					return false
+				}
 				msg.Sections = append(msg.Sections, Section{Kind: 0, Body: doc})
+				offset += docLen
 			} else if kind == 1 {
 				log.Errorf("Unsupported Kind == 1")
+				return false
 			} else {
 				log.Errorf("Unsupported Kind == %d", kind)
-				log.Errorf("msg: %+v", msg)
-				log.Errorf("buf: %+v", buf)
+				return false
 			}
 		}
 		log.Debugf("Received OP_MSG requestID: %d, Message: %+v", header.RequestID, msg)

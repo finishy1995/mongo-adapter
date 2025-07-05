@@ -24,6 +24,15 @@ Cross Region(2 regions):
 
 The same principle applies to three or more regions. The deployment of MongoDB servers can be adjusted to a 1-1-1, 2-2-1, or any other configuration suitable for multi-region setups.
 
+## ✅ Verified Frameworks
+
+The following frameworks have been tested and verified for compatibility:
+
+- **[Skynet](https://github.com/cloudwu/skynet)**
+
+**Verification details:**  
+Unit tests are used for verification. With the [mongo-adapter](https://github.com/cloudwu/skynet/blob/master/lualib/mongo.lua), Skynet can directly connect both to this mock server and to MongoDB Atlas ([https://cloud.mongodb.com/](https://cloud.mongodb.com/)) running MongoDB 7.0 and 8.0.  
+All tests pass against both the mock server and real MongoDB clusters.
 
 ## Scenarios
 
