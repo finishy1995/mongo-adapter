@@ -60,18 +60,27 @@ func (s *Server) OnMessage(conn Conn, buf []byte) bool {
 			log.Errorf("Error reading numberToReturn:", err)
 			return false
 		}
-		query.Query = buffer.Bytes()
+		// ---- 修正：只取第一个 BSON 文档 ----
+		raw := buffer.Bytes()
+		if len(raw) < 4 {
+			log.Errorf("Query too short, no BSON length")
+			return false
+		}
+		bsonLen := int(binary.LittleEndian.Uint32(raw[:4]))
+		if len(raw) < bsonLen {
+			log.Errorf("Query BSON length out of bound, %d < %d", len(raw), bsonLen)
+			return false
+		}
+		query.Query = raw[:bsonLen]
+		query.ReturnFieldsSelector = raw[bsonLen:]
+
 		var cmd bson.D
 		if err := bson.Unmarshal(query.Query, &cmd); err != nil {
 			log.Errorf("Error unmarshalling query:", err)
 			return false
 		}
-
 		log.Debugf("Received OP_QUERY requestID: %d, Collection: %s, Message: %+v", header.RequestID, query.FullCollectionName, cmd)
-
-		if query.FullCollectionName == "admin.$cmd" {
-			s.sendResponse(conn, header.RequestID, header.OpCode, messageHandle(cmd))
-		}
+		s.sendResponse(conn, header.RequestID, header.OpCode, messageHandle(cmd))
 		break
 	case OP_MSG:
 		msg := OpMsg{Header: header}

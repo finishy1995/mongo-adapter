@@ -33,6 +33,15 @@ func messageHandle(message bson.D) bson.M {
 	}
 	var result bson.M
 
+	// MongoDB 4.0 前，使用 MONGODB-CR 认证
+	if _, ok := getValueFromD(message, "getnonce"); ok {
+		result = bson.M{
+			"nonce": getRandomString(16),
+			"ok":    1,
+		}
+		return result
+	}
+
 	// 正确查找 ismaster 字段
 	if _, ok := getValueFromD(message, "ismaster"); ok {
 		err := db.Database("admin").RunCommand(context.TODO(), bson.M{"ismaster": 1}).Decode(&result)
