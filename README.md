@@ -29,6 +29,7 @@ The same principle applies to three or more regions. The deployment of MongoDB s
 The following frameworks have been tested and verified for compatibility:
 
 - **[Skynet](https://github.com/cloudwu/skynet)**
+- **[mgo](https://github.com/go-mgo/mgo)**
 
 **Verification details:**  
 
@@ -37,7 +38,7 @@ Unit tests are used for verification. With the `mongo-adapter`, these frameworks
 ## Scenarios
 
 - [x] Solving application-side lack of TLS support, e.g., enabling Atlas usage for clients that do not support TLS
-- [ ] Bridging old or unofficial drivers to connect with newer versions of MongoDB (cross-version compatibility)
+- [x] Bridging old or unofficial drivers to connect with newer versions of MongoDB (cross-version compatibility)
 - [ ] Cross-database support, e.g., executing SQL statements to operate on MongoDB
 - [ ] UDP and WebSocket protocol support, enabling direct MongoDB access in weak network or browser-based scenarios
 - [x] Cross-region and multi-availability-zone high availability deployment, supporting pseudo-multi-region read/write
@@ -78,6 +79,12 @@ go build -o mongo-adapter main.go
 ### 4. Connect
 
 Point your MongoDB client/tool at your `mongo-adapter` listen address.
+
+## Known Issues
+
+> **First connection timeout when debug is off (mgo compatibility):**  
+> When using the `mongo-adapter` as a mock server for [mgo](https://github.com/go-mgo/mgo), the first client connection will always experience an `i/o timeout` if `mgo.SetDebug(true)` is **not** set. With debug enabled, everything works smoothly.  
+> **Root cause:** This is typically due to concurrency, buffering, or response timing issues in the network implementation. Enabling debug logging introduces enough delay to avoid the race condition.  
 
 ## License
 
