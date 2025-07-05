@@ -24,15 +24,17 @@ func NewServer() *Server {
 
 func (s *Server) OnMessage(conn Conn, buf []byte) bool {
 	buffer := bytes.NewBuffer(buf)
-	header := MsgHeader{}
-	if len(buf) < int(header.MessageLength) {
-		log.Errorf("Client sent less than %d bytes, len: %d", header.MessageLength, len(buf))
+	if len(buf) < 16 {
+		log.Errorf("Client sent short packet, len: %d", len(buf))
 		return false
 	}
-
-	// 读取 header
+	header := MsgHeader{}
 	if err := binary.Read(buffer, binary.LittleEndian, &header); err != nil {
 		log.Errorf("Error reading header: %v", err)
+		return false
+	}
+	if len(buf) < int(header.MessageLength) {
+		log.Errorf("Client sent less than header.MessageLength: %d", header.MessageLength)
 		return false
 	}
 
@@ -68,7 +70,7 @@ func (s *Server) OnMessage(conn Conn, buf []byte) bool {
 		log.Debugf("Received OP_QUERY requestID: %d, Collection: %s, Message: %+v", header.RequestID, query.FullCollectionName, cmd)
 
 		if query.FullCollectionName == "admin.$cmd" {
-			s.sendResponse(conn, header.RequestID, messageHandle(cmd))
+			s.sendResponse(conn, header.RequestID, header.OpCode, messageHandle(cmd))
 		}
 		break
 	case OP_MSG:
@@ -77,6 +79,7 @@ func (s *Server) OnMessage(conn Conn, buf []byte) bool {
 			log.Errorf("Error reading flags:", err)
 			return false
 		}
+
 		msg.Sections = make([]Section, 0)
 		for buffer.Len() > 0 {
 			kind, _ := buffer.ReadByte()
@@ -94,10 +97,12 @@ func (s *Server) OnMessage(conn Conn, buf []byte) bool {
 				log.Errorf("Unsupported Kind == 1")
 			} else {
 				log.Errorf("Unsupported Kind == %d", kind)
+				log.Errorf("msg: %+v", msg)
+				log.Errorf("buf: %+v", buf)
 			}
 		}
 		log.Debugf("Received OP_MSG requestID: %d, Message: %+v", header.RequestID, msg)
-		s.sendResponse(conn, header.RequestID, messageHandle(msg.Sections[0].Body))
+		s.sendResponse(conn, header.RequestID, header.OpCode, messageHandle(msg.Sections[0].Body))
 		break
 	default:
 		log.Errorf("Received unsupported OpCode: %d\n", header.OpCode)
@@ -106,43 +111,68 @@ func (s *Server) OnMessage(conn Conn, buf []byte) bool {
 
 	return true
 }
-
-func (s *Server) sendResponse(conn Conn, requestID int32, responseDoc bson.M) {
+func (s *Server) sendResponse(conn Conn, requestID int32, requestOpCode int32, responseDoc bson.M) {
 	log.Debugf("sendResponse. requestID: %d, responseDoc: %+v", requestID, responseDoc)
 
 	responseBytes, err := bson.Marshal(responseDoc)
 	if err != nil {
-		log.Errorf("Error marshaling response:", err)
+		log.Errorf("Error marshaling response: %v", err)
 		return
 	}
 
-	// Create response header
-	header := MsgHeader{
-		MessageLength: int32(36 + len(responseBytes)),
-		RequestID:     requestID,
-		ResponseTo:    requestID,
-		OpCode:        OP_REPLY,
-	}
+	// MongoDB 3.6- 之前的版本，返回的是 OP_REPLY
+	if requestOpCode == OP_QUERY {
+		// --- OP_REPLY 格式 ---
+		header := MsgHeader{
+			MessageLength: int32(36 + len(responseBytes)), // header(16) + reply(20) + bson
+			RequestID:     requestID,
+			ResponseTo:    requestID,
+			OpCode:        OP_REPLY,
+		}
+		reply := OpReply{
+			ResponseFlags:  0,
+			CursorID:       0,
+			StartingFrom:   0,
+			NumberReturned: 1,
+		}
 
-	// Create reply message
-	reply := OpReply{
-		ResponseFlags:  0,
-		CursorID:       0,
-		StartingFrom:   0,
-		NumberReturned: 1,
-	}
+		buf := new(bytes.Buffer)
+		binary.Write(buf, binary.LittleEndian, &header)
+		binary.Write(buf, binary.LittleEndian, &reply.ResponseFlags)
+		binary.Write(buf, binary.LittleEndian, &reply.CursorID)
+		binary.Write(buf, binary.LittleEndian, &reply.StartingFrom)
+		binary.Write(buf, binary.LittleEndian, &reply.NumberReturned)
+		buf.Write(responseBytes)
 
-	// Write header and reply
-	buf := new(bytes.Buffer)
-	binary.Write(buf, binary.LittleEndian, &header)
-	binary.Write(buf, binary.LittleEndian, &reply.ResponseFlags)
-	binary.Write(buf, binary.LittleEndian, &reply.CursorID)
-	binary.Write(buf, binary.LittleEndian, &reply.StartingFrom)
-	binary.Write(buf, binary.LittleEndian, &reply.NumberReturned)
-	buf.Write(responseBytes)
+		written, err := conn.Write(buf.Bytes())
+		if err != nil || written != buf.Len() {
+			log.Errorf("Error writing OP_REPLY response: %v, written %d/%d bytes\n", err, written, buf.Len())
+		}
+	} else if requestOpCode == OP_MSG {
+		// --- OP_MSG 格式 ---
+		// OP_MSG header(16) + flags(4) + section0_kind(1) + bson
+		flags := int32(0)
+		section0Kind := byte(0)
 
-	written, err := conn.Write(buf.Bytes())
-	if err != nil || written != buf.Len() {
-		log.Errorf("Error writing response: %v, written %d/%d bytes\n", err, written, buf.Len())
+		messageLength := int32(21 + len(responseBytes))
+		header := MsgHeader{
+			MessageLength: messageLength,
+			RequestID:     requestID,
+			ResponseTo:    requestID,
+			OpCode:        OP_MSG,
+		}
+
+		buf := new(bytes.Buffer)
+		binary.Write(buf, binary.LittleEndian, &header)
+		binary.Write(buf, binary.LittleEndian, flags) // Flags (4 bytes)
+		buf.WriteByte(section0Kind)                   // Section 0 Kind (1 byte)
+		buf.Write(responseBytes)                      // Section 0 Body (bson)
+
+		written, err := conn.Write(buf.Bytes())
+		if err != nil || written != buf.Len() {
+			log.Errorf("Error writing OP_MSG response: %v, written %d/%d bytes\n", err, written, buf.Len())
+		}
+	} else {
+		log.Errorf("Unsupported requestOpCode: %d", requestOpCode)
 	}
 }
