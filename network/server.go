@@ -75,7 +75,8 @@ func (s *Server) OnTraffic(c gnet.Conn) (action gnet.Action) {
 			break // 半包
 		}
 		// 交给 protocolServer 处理
-		if !s.protocolServer.OnMessage(c, full[:length]) {
+		if err := s.protocolServer.OnMessage(c, full[:length]); err != nil {
+			log.Errorf("%s", err.Error())
 			return gnet.Close
 		}
 		// 消费掉已处理数据

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 // readCString reads a C-style string from the provided buffer
@@ -49,4 +51,55 @@ func readBSONBytes(reader io.Reader) ([]byte, error) {
 		return nil, fmt.Errorf("read bson body: %w", err)
 	}
 	return buf, nil
+}
+
+// 深拷贝 bson.D
+func deepCopyBsonD(src bson.D) bson.D {
+	if src == nil {
+		return nil
+	}
+	dst := make(bson.D, len(src))
+	for i, elem := range src {
+		dst[i] = bson.E{
+			Key:   elem.Key,
+			Value: deepCopyValue(elem.Value),
+		}
+	}
+	return dst
+}
+
+// 深拷贝 bson.M
+func deepCopyBsonM(src bson.M) bson.M {
+	if src == nil {
+		return nil
+	}
+	dst := make(bson.M, len(src))
+	for k, v := range src {
+		dst[k] = deepCopyValue(v)
+	}
+	return dst
+}
+
+// 深度拷贝任意值
+func deepCopyValue(v interface{}) interface{} {
+	switch val := v.(type) {
+	case bson.D:
+		return deepCopyBsonD(val)
+	case bson.M:
+		return deepCopyBsonM(val)
+	case []interface{}:
+		copied := make([]interface{}, len(val))
+		for i, item := range val {
+			copied[i] = deepCopyValue(item)
+		}
+		return copied
+	case map[string]interface{}:
+		copied := make(map[string]interface{}, len(val))
+		for k, item := range val {
+			copied[k] = deepCopyValue(item)
+		}
+		return copied
+	default:
+		return val // 基本类型直接返回
+	}
 }

@@ -28,14 +28,22 @@ func getValueFromD(doc bson.D, key string) (interface{}, bool) {
 	return nil, false
 }
 
-func messageHandle(message bson.D) bson.M {
+func messageHandle(message bson.D, hookContext *HookContext) bson.M {
 	if db == nil {
 		return bson.M{"ok": 0, "errmsg": "MongoDB server connection error"}
 	}
 	var result bson.M
+	hookContext.Type = HookReqHandleAfter
+	defer func() {
+		hookContext.Response = result
+		hookContext.Type = HookRespHandleBefore
+		fireHook(hookContext)
+	}()
 
 	// MongoDB 4.0 前，使用 MONGODB-CR 认证
 	if _, ok := getValueFromD(message, "getnonce"); ok {
+		hookContext.Request = bson.D{{Key: "getnonce", Value: 1}}
+		fireHook(hookContext)
 		log.Warnf("getnonce command is not supported after MongoDB 4.0, message: %+v", message)
 		result = bson.M{
 			"nonce": getRandomString(16),
@@ -44,30 +52,34 @@ func messageHandle(message bson.D) bson.M {
 		return result
 	}
 
+	cmd := bson.D{}
 	// 正确查找 ismaster 字段
 	if _, ok := getValueFromD(message, "ismaster"); ok {
-		err := db.Database("admin").RunCommand(context.TODO(), bson.M{"ismaster": 1}).Decode(&result)
+		cmd = bson.D{{Key: "ismaster", Value: 1}}
+		fireHook(hookContext)
+		var response bson.M
+		err := db.Database("admin").RunCommand(context.TODO(), cmd).Decode(&response)
 		if err != nil {
 			log.Warnf("ismaster command failed: %v, message: %+v", err, message)
-			return bson.M{"ok": 0, "errmsg": err.Error()}
+			result = bson.M{"ok": 0, "errmsg": err.Error()}
+			return result
 		}
 		// 构造更简洁的响应
-		response := bson.M{
+		result = bson.M{
 			"ismaster":       true,
-			"maxWireVersion": result["maxWireVersion"],
-			"minWireVersion": result["minWireVersion"],
+			"maxWireVersion": response["maxWireVersion"],
+			"minWireVersion": response["minWireVersion"],
 			"ok":             1,
 			"hosts":          []string{exposeAddr},
 			"primary":        exposeAddr,
 			"me":             exposeAddr,
 		}
-		if v, ok := result["logicalSessionTimeoutMinutes"]; ok {
+		if v, ok := response["logicalSessionTimeoutMinutes"]; ok {
 			response["logicalSessionTimeoutMinutes"] = v
 		}
-		return response
+		return result
 	}
 
-	cmd := bson.D{}
 	for _, e := range message {
 		k := e.Key
 		v := e.Value
@@ -82,6 +94,7 @@ func messageHandle(message bson.D) bson.M {
 		cmd = append(cmd, bson.E{Key: k, Value: v})
 	}
 
+	fireHook(hookContext)
 	err := db.Database(getDBFromD(message)).RunCommand(context.TODO(), cmd).Decode(&result)
 	if err != nil {
 		// TODO: 使用更好的错误处理和记录方式，例如筛选出权限不足的错误、参数错误等
