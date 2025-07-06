@@ -1,8 +1,9 @@
 package log
 
 import (
-	"github.com/op/go-logging"
 	"os"
+
+	"github.com/op/go-logging"
 )
 
 type goLoggingLogger struct {
@@ -10,7 +11,7 @@ type goLoggingLogger struct {
 }
 
 const (
-	ModuleName = "CodeGenerator"
+	ModuleName = "MongoAdapter"
 )
 
 var (

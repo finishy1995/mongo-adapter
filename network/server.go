@@ -40,7 +40,7 @@ func (s *Server) OnShutdown(eng gnet.Engine) {
 }
 
 func (s *Server) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
-	log.Debugf("New client connection established, addr: %s", c.RemoteAddr())
+	log.Infof("New client connection established, addr: %s", c.RemoteAddr())
 	return
 }
 
@@ -52,7 +52,7 @@ func (s *Server) OnClose(c gnet.Conn, err error) (action gnet.Action) {
 			return
 		}
 	}
-	log.Debugf("Client disconnected, addr: %s", c.RemoteAddr())
+	log.Infof("Client disconnected, addr: %s", c.RemoteAddr())
 	return
 }
 
