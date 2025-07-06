@@ -56,6 +56,10 @@ func (g *goLoggingLogger) Fatalf(s string, i ...interface{}) {
 	g.log.Fatalf(s, i...)
 }
 
+func (g *goLoggingLogger) Printf(s string, i ...interface{}) {
+	g.log.Infof(s, i...)
+}
+
 func (g *goLoggingLogger) SetLevel(level Level) {
 	if l, ok := levelMap[level]; ok {
 		logging.SetLevel(l, ModuleName)

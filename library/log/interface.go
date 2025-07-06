@@ -19,6 +19,7 @@ type Logger interface {
 	Warnf(string, ...interface{})
 	Errorf(string, ...interface{})
 	Fatalf(string, ...interface{})
+	Printf(string, ...interface{})
 	SetLevel(Level)
 }
 

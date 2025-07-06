@@ -5,8 +5,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"net"
 
+	"finishy1995/mongo-adapter/library/id"
 	"finishy1995/mongo-adapter/library/log"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -15,7 +15,6 @@ import (
 type Conn interface {
 	io.Reader
 	io.Writer
-	RemoteAddr() net.Addr
 }
 
 type Server struct {
@@ -27,24 +26,8 @@ func NewServer() *Server {
 
 func (s *Server) OnMessage(conn Conn, buf []byte) error {
 	var returnErr error = nil
-	hookContext := &HookContext{
-		Type: HookStart,
-	}
-	defer func() {
-		if hookContext.ID == "" {
-			// 包头无法正确加载
-			return
-		}
-		if hookContext.Type == HookStart {
-			hookContext.Type = HookReqHandleBefore
-			hookContext.ErrMsg = returnErr.Error()
-			fireHook(hookContext)
-		}
-		hookContext.Type = HookEnd
-		hookContext.ErrMsg = ""
-		fireHook(hookContext)
-	}()
 
+	// 加载包头
 	buffer := bytes.NewBuffer(buf)
 	if len(buf) < 16 {
 		returnErr = fmt.Errorf("Client sent short packet, len: %d", len(buf))
@@ -59,7 +42,27 @@ func (s *Server) OnMessage(conn Conn, buf []byte) error {
 		returnErr = fmt.Errorf("Client sent less than header.MessageLength: %d", header.MessageLength)
 		return returnErr
 	}
-	hookContext.ID = getHookID(conn, header.RequestID)
+
+	// Hook 启动
+	hookContext := &HookContext{
+		ID:   id.GenerateID(),
+		Type: HookStart,
+	}
+	returnErr = fireHook(hookContext)
+	if returnErr != nil {
+		return returnErr
+	}
+	// 启动后必定会结束
+	defer func() {
+		if hookContext.Type == HookStart {
+			hookContext.Type = HookReqHandleBefore
+			hookContext.ErrMsg = returnErr.Error()
+			fireHook(hookContext)
+		}
+		hookContext.Type = HookEnd
+		hookContext.ErrMsg = ""
+		fireHook(hookContext)
+	}()
 
 	switch header.OpCode {
 	case OP_QUERY: // OP_QUERY
@@ -68,7 +71,6 @@ func (s *Server) OnMessage(conn Conn, buf []byte) error {
 			returnErr = fmt.Errorf("Error reading flags:", err)
 			return returnErr
 		}
-
 		collectionName, err := readCString(buffer)
 		if err != nil {
 			returnErr = fmt.Errorf("Error reading collection name:", err)
@@ -106,7 +108,7 @@ func (s *Server) OnMessage(conn Conn, buf []byte) error {
 		hookContext.Request = cmd
 		hookContext.Type = HookReqHandleBefore
 		fireHook(hookContext)
-		s.sendResponse(conn, header.RequestID, header.OpCode, messageHandle(cmd, hookContext))
+		s.sendResponse(conn, header.RequestID, header.OpCode, messageHandle(cmd, hookContext), hookContext.ID)
 		break
 	case OP_MSG:
 		msg := OpMsg{Header: header}
@@ -159,7 +161,7 @@ func (s *Server) OnMessage(conn Conn, buf []byte) error {
 		hookContext.Request = msg.Sections[0].Body
 		hookContext.Type = HookReqHandleBefore
 		fireHook(hookContext)
-		s.sendResponse(conn, header.RequestID, header.OpCode, messageHandle(msg.Sections[0].Body, hookContext))
+		s.sendResponse(conn, header.RequestID, header.OpCode, messageHandle(msg.Sections[0].Body, hookContext), hookContext.ID)
 		break
 	default:
 		returnErr = fmt.Errorf("Received unsupported OpCode: %d\n", header.OpCode)
@@ -169,16 +171,18 @@ func (s *Server) OnMessage(conn Conn, buf []byte) error {
 	return nil
 }
 
-func (s *Server) sendResponse(conn Conn, requestID int32, requestOpCode int32, responseDoc bson.M) {
+func (s *Server) sendResponse(conn Conn, requestID int32, requestOpCode int32, responseDoc bson.M, hookID id.ID) {
 	log.Debugf("sendResponse. requestID: %d, responseDoc: %+v", requestID, responseDoc)
 	hookContext := &HookContext{
-		ID:       getHookID(conn, requestID),
+		ID:       hookID,
 		Type:     HookRespHandleAfter,
 		Response: responseDoc,
 	}
 	var err error
 	defer func() {
-		hookContext.ErrMsg = err.Error()
+		if err != nil {
+			hookContext.ErrMsg = err.Error()
+		}
 		fireHook(hookContext)
 	}()
 
@@ -240,8 +244,4 @@ func (s *Server) sendResponse(conn Conn, requestID int32, requestOpCode int32, r
 		log.Errorf("Error writing response: %v, written %d/%d bytes\n", err, written, buf.Len())
 	}
 	return
-}
-
-func getHookID(conn Conn, requestID int32) string {
-	return fmt.Sprintf("%s--%d", conn.RemoteAddr().String(), requestID)
 }

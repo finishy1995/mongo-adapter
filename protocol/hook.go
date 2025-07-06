@@ -1,7 +1,9 @@
 package protocol
 
 import (
+	"finishy1995/mongo-adapter/library/id"
 	"finishy1995/mongo-adapter/library/log"
+	"fmt"
 	"sync"
 	"time"
 
@@ -11,7 +13,7 @@ import (
 
 type HookType int8
 type HookContext struct {
-	ID       string
+	ID       id.ID
 	Type     HookType
 	ErrMsg   string
 	Request  bson.D
@@ -28,7 +30,7 @@ const (
 	HookEnd              HookType = 127
 
 	MaxHookType            = 6
-	MaxHookChannelLifetime = 1 * time.Hour // TODO：可配置
+	MaxHookChannelLifetime = 1 * time.Minute // TODO：可配置
 )
 
 var (
@@ -36,12 +38,15 @@ var (
 	routinePool *ants.Pool
 
 	hookChanMu     sync.RWMutex
-	hookChannelMap = map[string]chan *HookContext{}
+	hookChannelMap = map[id.ID]chan *HookContext{}
 )
 
 func init() {
 	var err error
-	routinePool, err = ants.NewPool(1000) // TODO: 1000 并发数应该可配置
+	routinePool, err = ants.NewPool(
+		1000,
+		ants.WithLogger(log.GetLogger()),
+		ants.WithNonblocking(true)) // TODO: 1000 并发数应该可配置
 	if err != nil {
 		panic(err)
 	}
@@ -55,53 +60,45 @@ func RegisterHook(hookType HookType, hookFunc HookFunc) {
 	hookManager[hookType] = append(hookManager[hookType], hookFunc)
 }
 
-func fireHook(context *HookContext) {
+func fireHook(context *HookContext) error {
 	log.Debugf("fireHook. context: %+v", context)
-	if hookManager[context.Type] == nil && context.Type != HookEnd {
-		return
+	if context.Type != HookEnd && context.Type != HookStart && hookManager[context.Type] == nil {
+		return nil
 	}
 	copyContext := deepCopyContext(context)
 
-	hookChanMu.Lock()
-	channel, getChannelOk := hookChannelMap[copyContext.ID]
-	if !getChannelOk {
+	if context.Type == HookStart {
+		hookChanMu.Lock()
+		channel, getChannelOk := hookChannelMap[copyContext.ID]
+		if getChannelOk {
+			hookChanMu.Unlock()
+			return fmt.Errorf("hook channel already exist, id: %v", copyContext.ID)
+		}
 		channel = make(chan *HookContext, MaxHookType)
 		hookChannelMap[copyContext.ID] = channel
+		hookChanMu.Unlock()
 
 		err := routinePool.Submit(func() {
-			ctx := &HookContext{
-				ID:   copyContext.ID,
-				Type: HookStart,
-			}
-
+			ctx := copyContext
 			defer func() {
 				if r := recover(); r != nil {
 					log.Errorf("hook routine panic: %v", r)
 				}
-
+				hookChanMu.Lock()
 				if c, ok := hookChannelMap[ctx.ID]; ok {
 					close(c)
-					hookChanMu.Lock()
 					delete(hookChannelMap, ctx.ID)
-					hookChanMu.Unlock()
 				}
+				hookChanMu.Unlock()
 			}()
 
-			hookChanMu.RLock()
-			c, ok := hookChannelMap[ctx.ID]
-			hookChanMu.RUnlock()
-
-			if !ok {
-				log.Errorf("hook channel not found, id: %v", ctx.ID)
-				return
-			}
 			for {
 				select {
-				case hookContext := <-c:
+				case hookContext := <-channel:
 					if hookContext.Type == HookEnd {
 						return
 					}
-					if hookContext.Type <= ctx.Type {
+					if hookContext.Type != HookStart && hookContext.Type <= ctx.Type {
 						log.Errorf("hook type error, now: %v, hook: %v", ctx.Type, hookContext.Type)
 						return
 					}
@@ -127,15 +124,24 @@ func fireHook(context *HookContext) {
 			}
 		})
 		if err != nil {
-			log.Errorf("hook routine submit error: %v", err)
 			close(channel)
+			hookChanMu.Lock()
 			delete(hookChannelMap, copyContext.ID)
 			hookChanMu.Unlock()
-			return
+			return err
 		}
 	}
-	hookChanMu.Unlock()
+
+	hookChanMu.RLock()
+	channel, getChannelOk := hookChannelMap[copyContext.ID]
+	hookChanMu.RUnlock()
+	if !getChannelOk {
+		log.Errorf("hook channel not found, id: %v", copyContext.ID)
+		return fmt.Errorf("hook channel not found, id: %v", copyContext.ID)
+	}
 	channel <- copyContext
+
+	return nil
 }
 
 func safeRunHookFunc(hookFunc HookFunc, context *HookContext) {
