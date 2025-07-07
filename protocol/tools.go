@@ -3,11 +3,13 @@ package protocol
 import (
 	"bytes"
 	"encoding/binary"
+	"finishy1995/mongo-adapter/library/log"
 	"fmt"
 	"io"
 	"math/rand"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // readCString reads a C-style string from the provided buffer
@@ -102,4 +104,65 @@ func deepCopyValue(v interface{}) interface{} {
 	default:
 		return val // 基本类型直接返回
 	}
+}
+
+// GetOperationAndCollection
+// 输入: request: [{Key:find Value:testcoll} {Key:$db Value:testdb} {Key:filter Value:[{Key:test_key Value:1}]} {Key:limit Value:1} {Key:projection Value:[]}]
+// 输出: operation: find, collection: testdb.testcoll
+func GetOperationAndCollection(request bson.D) (operation string, collection string) {
+	var dbName, collName string
+
+	// 定义可能的操作键
+	operationKeys := map[string]bool{
+		"find":          true,
+		"insert":        true,
+		"update":        true,
+		"delete":        true,
+		"aggregate":     true,
+		"count":         true,
+		"distinct":      true,
+		"mapReduce":     true,
+		"create":        true,
+		"drop":          true,
+		"createIndexes": true,
+		"dropIndexes":   true,
+	}
+
+	for _, elem := range request {
+		// 提取数据库名称
+		if elem.Key == "$db" {
+			if db, ok := elem.Value.(string); ok {
+				dbName = db
+			}
+		} else if operationKeys[elem.Key] && operation == "" {
+			// 提取操作名称和集合名称（只取第一个匹配的操作键）
+			operation = elem.Key
+			if coll, ok := elem.Value.(string); ok {
+				collName = coll
+			}
+		}
+	}
+
+	// 组合数据库和集合名称
+	if dbName != "" && collName != "" {
+		collection = dbName + "." + collName
+	}
+
+	if operation == "" {
+		log.Warnf("get operation and collection failed, request: %+v", request)
+	}
+
+	return operation, collection
+}
+
+func GetOperationTime(response bson.M) uint32 {
+	if response == nil {
+		return 0
+	}
+	if operationTime, ok := response["operationTime"]; ok {
+		if t, ok := operationTime.(primitive.Timestamp); ok {
+			return t.T
+		}
+	}
+	return 0
 }

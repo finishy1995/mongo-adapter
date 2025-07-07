@@ -7,6 +7,7 @@ import (
 
 	"finishy1995/mongo-adapter/library/log"
 	"finishy1995/mongo-adapter/network"
+	"finishy1995/mongo-adapter/plugins"
 	"finishy1995/mongo-adapter/protocol"
 )
 
@@ -32,6 +33,10 @@ func main() {
 	protocol.RegisterMongoDBByURI(*uri)
 	// 注册对外服务暴露的地址
 	protocol.RegisterExposeAddress(*exposeAddr)
+
+	// 启动插件
+	plugins.StartPlugins([]string{"status"})
+
 	// 启动服务
 	network.NewServerAndMustStart(*listenAddr, protocol.NewServer())
 }

@@ -60,6 +60,19 @@ func RegisterHook(hookType HookType, hookFunc HookFunc) {
 	hookManager[hookType] = append(hookManager[hookType], hookFunc)
 }
 
+// UnRegisterHook 取消注册
+func UnRegisterHook(hookType HookType, hookFunc HookFunc) {
+	if hookManager[hookType] == nil {
+		return
+	}
+	for i, h := range hookManager[hookType] {
+		if &h == &hookFunc {
+			hookManager[hookType] = append(hookManager[hookType][:i], hookManager[hookType][i+1:]...)
+			return
+		}
+	}
+}
+
 func fireHook(context *HookContext) error {
 	log.Debugf("fireHook. context: %+v", context)
 	if context.Type != HookEnd && context.Type != HookStart && hookManager[context.Type] == nil {
